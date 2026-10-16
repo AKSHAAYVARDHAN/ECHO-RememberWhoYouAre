@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-void: #000000;
+    --text-primary: #E8E8E8;
+    --text-muted: #888888;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
+    background-color: #000000;
+    color: #E8E8E8;
+    font-family: 'IBM Plex Mono', 'JetBrains Mono', 'Space Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    touch-action: manipulation;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100%;
+    min-height: 100dvh;
+    position: relative;
+    background-color: #000000;
+  }
+}
+
+/* Perspective viewport for cosmic 3D quote space */
+.cosmic-space-perspective {
+  perspective: 1000px;
+  perspective-origin: 50% 50%;
+  transform-style: preserve-3d;
+}

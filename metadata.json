@@ -1,0 +1,8 @@
+{
+  "name": "EXIF - The Soul Within",
+  "description": "An endless cosmic environment where personal affirmations emerge spontaneously from an infinite black space.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
