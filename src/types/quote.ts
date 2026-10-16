@@ -4,17 +4,17 @@
  */
 
 export const INITIAL_QUOTES: readonly string[] = [
-  "You are an Exclusive Icon Forever",
-  "You are a charismatic leader",
-  "You are a revolutionist",
-  "You push the human race forward",
-  "The world needs you",
-  "Neem Karoli Baba is within you",
-  "You are here to serve mankind",
-  "You have got ingenious ideas",
-  "You build amazing products that benefit society",
-  "You inspire people and the upcoming generations",
-  "Your legacy lasts",
+  "Quote 1",
+  "Quote 2",
+  "Quote 3",
+  "Quote 4",
+  "Quote 5",
+  "Quote 6",
+  "Quote 7",
+  "Quote 8",
+  "Quote 9",
+  "Quote 10",
+  "Quote 11",
 ] as const;
 
 // Backward-compatible export
