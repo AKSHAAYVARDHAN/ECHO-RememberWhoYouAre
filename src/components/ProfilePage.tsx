@@ -4,15 +4,17 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Edit2, Trash2, Check, X, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Check, X, RotateCcw, LogOut, CheckCircle2, User as UserIcon, LogIn } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { ProfileData } from '../types/quote';
 
 interface ProfilePageProps {
   onBack: () => void;
+  onNavigateAuth?: () => void;
 }
 
-export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
+export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth }) => {
   const {
     profile,
     updateProfile,
@@ -21,7 +23,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
     editQuote,
     deleteQuote,
     resetQuotesToDefaults,
+    isSyncing,
   } = useApp();
+
+  const { user, isSigningIn, signInWithGoogle, signOutUser, authError, clearAuthError } = useAuth();
 
   // Local state for profile form fields
   const [formData, setFormData] = useState<ProfileData>({
@@ -59,11 +64,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   const [confirmReset, setConfirmReset] = useState(false);
 
   // Handle Profile Save
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setProfileStatus(null);
 
-    const result = updateProfile(formData);
+    const result = await updateProfile(formData);
     if (result.success) {
       setProfileStatus({ type: 'success', message: 'Profile saved' });
       const timer = window.setTimeout(() => {
@@ -76,11 +81,11 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   };
 
   // Handle Add Quote
-  const handleAddQuote = (e: React.FormEvent) => {
+  const handleAddQuote = async (e: React.FormEvent) => {
     e.preventDefault();
     setQuoteAddError(null);
 
-    const result = addQuote(newQuoteText);
+    const result = await addQuote(newQuoteText);
     if (!result.success) {
       setQuoteAddError(result.error || 'Could not add quote');
     } else {
@@ -97,9 +102,9 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   };
 
   // Handle Save Edit
-  const handleSaveEdit = (id: string) => {
+  const handleSaveEdit = async (id: string) => {
     setEditError(null);
-    const result = editQuote(id, editingText);
+    const result = await editQuote(id, editingText);
     if (!result.success) {
       setEditError(result.error || 'Could not update quote');
     } else {
@@ -115,8 +120,8 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
   };
 
   // Handle Delete Confirmation
-  const confirmDelete = (id: string) => {
-    deleteQuote(id);
+  const confirmDelete = async (id: string) => {
+    await deleteQuote(id);
     setConfirmDeleteId(null);
   };
 
@@ -146,6 +151,133 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack }) => {
 
       {/* Main Content Area */}
       <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 md:py-16 space-y-16">
+        {/* Section 0: Google Account & Cloud Synchronization */}
+        <section aria-labelledby="auth-heading" className="space-y-4">
+          <div className="border-b border-[#161616] pb-3 flex items-baseline justify-between">
+            <div>
+              <h2 id="auth-heading" className="text-xs uppercase tracking-[0.16em] text-[#A0A0A0]">
+                Google Account & Synchronization
+              </h2>
+              <p className="text-[11px] text-[#555555] mt-1">
+                Synchronize your affirmations and identity securely across devices.
+              </p>
+            </div>
+            {isSyncing && (
+              <span className="text-[10px] uppercase tracking-wider text-[#777777] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#777777] animate-pulse" />
+                Syncing...
+              </span>
+            )}
+          </div>
+
+          {user ? (
+            <div className="bg-[#080808] border border-[#1A1A1A] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'Google user'}
+                    className="w-10 h-10 rounded-full border border-[#333333] object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-[#141414] border border-[#2A2A2A] flex items-center justify-center text-[#888888]">
+                    <UserIcon className="w-4 h-4" />
+                  </div>
+                )}
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-[#E8E8E8]">
+                      {user.displayName || 'Affirmation Keeper'}
+                    </span>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-[#66AA66]" />
+                  </div>
+                  <p className="text-[11px] text-[#777777]">{user.email}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={signOutUser}
+                  className="px-3 py-1.5 text-[11px] uppercase tracking-wider text-[#888888] hover:text-[#FF7070] border border-[#222222] hover:border-[#3A1818] transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  <LogOut className="w-3 h-3" />
+                  Sign Out
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[#080808] border border-[#1A1A1A] p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs text-[#CCCCCC] font-normal">
+                  You are currently using local storage.
+                </p>
+                <p className="text-[11px] text-[#555555]">
+                  Sign in with Google to preserve and synchronize your cosmic affirmations everywhere.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onNavigateAuth) {
+                      onNavigateAuth();
+                    } else {
+                      signInWithGoogle(false);
+                    }
+                  }}
+                  disabled={isSigningIn}
+                  className="w-full sm:w-auto px-4 py-2.5 bg-[#FFFFFF] hover:bg-[#F2F2F2] active:bg-[#E5E5E5] text-[#1F1F1F] text-xs font-medium tracking-wide flex items-center justify-center gap-2.5 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSigningIn ? (
+                    <div className="w-3.5 h-3.5 border-2 border-[#555555] border-t-[#000000] rounded-full animate-spin" />
+                  ) : (
+                    <svg
+                      className="w-3.5 h-3.5 shrink-0"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.16 0 10.02 0 12s.45 3.84 1.25 5.42l4.03-3.15z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                      />
+                    </svg>
+                  )}
+                  <span className="font-sans font-medium text-xs">Continue with Google</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {authError && (
+            <div className="bg-[#120808] border border-[#3A1414] p-3 text-xs text-[#FF8585] flex items-center justify-between">
+              <span>{authError}</span>
+              <button
+                type="button"
+                onClick={clearAuthError}
+                className="text-[11px] underline text-[#AAAAAA] hover:text-[#FFFFFF] cursor-pointer ml-2"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
+        </section>
+
         {/* Section 1: Personal Identity */}
         <section aria-labelledby="identity-heading" className="space-y-6">
           <div className="border-b border-[#161616] pb-3">

@@ -1,0 +1,87 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information synchronized with personal identity settings",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth user ID"
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Personal display name"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 120,
+          "description": "User email address"
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "User profile avatar URL"
+        },
+        "bio": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Short personal biography"
+        },
+        "location": {
+          "type": "string",
+          "maxLength": 80,
+          "description": "User location or coordinates"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "ISO timestamp of last profile update"
+        }
+      },
+      "required": ["uid"]
+    },
+    "UserQuote": {
+      "title": "UserQuote",
+      "description": "Personal cosmic affirmation or thought floating in the user's universe",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Unique identifier for quote"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280,
+          "description": "The text content of the quote or affirmation"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Epoch timestamp in milliseconds when quote was created"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        }
+      },
+      "required": ["id", "text", "userId"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Private user identity and profile document"
+    },
+    "/users/{userId}/quotes/{quoteId}": {
+      "schema": {
+        "$ref": "#/entities/UserQuote"
+      },
+      "description": "User's collection of custom affirmations and quotes"
+    }
+  }
+}
