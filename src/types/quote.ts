@@ -4,26 +4,39 @@
  */
 
 export const INITIAL_QUOTES: readonly string[] = [
-  "Quote 1",
-  "Quote 2",
-  "Quote 3",
-  "Quote 4",
-  "Quote 5",
-  "Quote 6",
-  "Quote 7",
-  "Quote 8",
-  "Quote 9",
-  "Quote 10",
-  "Quote 11",
+  "I remember who I am.",
+  "I am becoming who I was meant to be.",
+  "I trust the person I am becoming.",
+  "I am here to make a difference.",
+  "I am filled with ingenious ideas.",
+  "I turn my vision into reality.",
+  "I am capable of extraordinary growth.",
+  "I trust the journey unfolding before me.",
+  "I am connected to something greater than myself.",
+  "I have the courage to pursue what matters.",
+  "I create the future I envision.",
 ] as const;
 
 // Backward-compatible export
 export const COSMIC_QUOTES = INITIAL_QUOTES;
 
+export const DEFAULT_QUOTES_VERSION = 2;
+
+export function getDefaultsSignature(defaults: readonly string[] = INITIAL_QUOTES): string {
+  return `v${DEFAULT_QUOTES_VERSION}_${defaults.length}_` + defaults.map((q) => q.trim()).join('||');
+}
+
+export type QuoteOrigin = 'default' | 'user';
+
 export interface QuoteItem {
   id: string;
   text: string;
   createdAt?: number;
+  origin?: QuoteOrigin;
+  defaultIndex?: number;
+  defaultId?: string;
+  isEdited?: boolean;
+  originalText?: string;
 }
 
 export interface ProfileData {

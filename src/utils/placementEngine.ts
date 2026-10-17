@@ -341,6 +341,14 @@ export function findCollisionFreePlacement(
     bottom: Math.max(safeArea.top, 20) + 44 + paddingY,
   };
 
+  // Reserved obstacle bounding box for the top-right Brand Wordmark (ECHO):
+  const brandHeaderReservedBox: BoundingBox = {
+    left: width - (Math.max(safeArea.right, 16) + (isMobile ? 54 : 68) + paddingX),
+    top: 0,
+    right: width,
+    bottom: Math.max(safeArea.top, 20) + 24 + paddingY,
+  };
+
   // Drift settings:
   // Mobile: zero drift prevents accidental encroachment while quotes animate fast
   // Desktop: gentle dynamic drift
@@ -368,8 +376,12 @@ export function findCollisionFreePlacement(
       horizontalOptions.push(Math.min(maxX, cx + wiggle));
     }
 
-    // Top vertical boundary: safely below profile icon obstacle
-    const minCy = Math.max(profileIconReservedBox.bottom + halfH, safeArea.top + halfH + 8);
+    // Top vertical boundary: safely below profile icon and brand header obstacles
+    const minCy = Math.max(
+      profileIconReservedBox.bottom + halfH,
+      brandHeaderReservedBox.bottom + halfH,
+      safeArea.top + halfH + 8
+    );
     // Bottom vertical boundary
     const maxCy = height - safeArea.bottom - halfH - 8;
 
@@ -440,8 +452,8 @@ export function findCollisionFreePlacement(
       continue;
     }
 
-    // 2. Profile icon collision check: quotes must NEVER overlap or encroach upon the profile icon
-    if (doBoxesIntersect(reservedBox, profileIconReservedBox)) {
+    // 2. Profile icon & brand header collision check: quotes must NEVER overlap or encroach upon UI chrome
+    if (doBoxesIntersect(reservedBox, profileIconReservedBox) || doBoxesIntersect(reservedBox, brandHeaderReservedBox)) {
       continue;
     }
 

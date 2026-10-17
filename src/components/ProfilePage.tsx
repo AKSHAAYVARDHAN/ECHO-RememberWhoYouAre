@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Edit2, Trash2, Check, X, RotateCcw, LogOut, CheckCircle2, User as UserIcon, LogIn } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
-import { ProfileData } from '../types/quote';
+import { ProfileData, INITIAL_QUOTES } from '../types/quote';
 
 interface ProfilePageProps {
   onBack: () => void;
@@ -141,10 +141,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
 
         <div className="flex items-baseline gap-2 select-none">
           <span className="text-[11px] tracking-[0.2em] uppercase text-[#666666] font-medium">
-            EXIF
+            ECHO
           </span>
           <span className="hidden sm:inline text-[10px] tracking-[0.14em] text-[#444444]">
-            · The Soul Within
+            · Remember Who You Are.
           </span>
         </div>
       </header>
@@ -341,7 +341,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
                 id="field-location"
                 type="text"
                 maxLength={80}
-                placeholder="City, Country or Coordinates"
+                placeholder="Where you see yourself"
                 value={formData.location}
                 onChange={(e) => setFormData((prev) => ({ ...prev, location: e.target.value }))}
                 className="w-full bg-[#0A0A0A] border border-[#202020] focus:border-[#555555] text-xs md:text-sm text-[#E8E8E8] placeholder-[#444444] px-3 py-2.5 outline-none rounded-none transition-colors"
@@ -549,7 +549,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
             })}
           </div>
 
-          {/* Reset collection to original 11 quotes */}
+          {/* Reset collection to original default quotes */}
           <div className="pt-6 pb-12 border-t border-[#161616] flex items-center justify-between text-xs text-[#555555]">
             {!confirmReset ? (
               <button
@@ -558,12 +558,12 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
                 className="flex items-center gap-2 text-[11px] text-[#555555] hover:text-[#888888] transition-colors cursor-pointer"
               >
                 <RotateCcw className="w-3 h-3" />
-                <span>Restore default 11 affirmations</span>
+                <span>Restore default {INITIAL_QUOTES.length} affirmations</span>
               </button>
             ) : (
               <div className="flex items-center gap-3 bg-[#0A0A0A] p-2.5 border border-[#202020] w-full justify-between">
                 <span className="text-[11px] text-[#888888]">
-                  Reset entire collection to the original 11 affirmations?
+                  Reset entire collection to the original {INITIAL_QUOTES.length} affirmations?
                 </span>
                 <div className="flex items-center gap-3 shrink-0">
                   <button

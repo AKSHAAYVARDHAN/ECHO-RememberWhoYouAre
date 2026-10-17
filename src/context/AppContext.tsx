@@ -5,58 +5,19 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
-import { INITIAL_QUOTES, QuoteItem, ProfileData } from '../types/quote';
+import { INITIAL_QUOTES, QuoteItem, ProfileData, getDefaultsSignature } from '../types/quote';
+import {
+  QUOTES_STORAGE_KEY,
+  PROFILE_STORAGE_KEY,
+  QUOTES_VERSION_KEY,
+  createDefaultQuotes,
+  loadDeletedDefaultIds,
+  saveDeletedDefaultIds,
+  migrateQuoteCollection,
+  loadAndMigrateStoredQuotes,
+} from '../utils/quoteMigration';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from './AuthContext';
-
-const QUOTES_STORAGE_KEY = 'insideout_quotes_v1';
-const PROFILE_STORAGE_KEY = 'insideout_profile_v1';
-
-function createDefaultQuotes(): QuoteItem[] {
-  return INITIAL_QUOTES.map((text, idx) => ({
-    id: `quote-init-${idx + 1}`,
-    text,
-    createdAt: 1700000000000 + idx * 1000,
-  }));
-}
-
-function loadStoredQuotes(): QuoteItem[] {
-  if (typeof window === 'undefined') {
-    return createDefaultQuotes();
-  }
-  try {
-    const raw = localStorage.getItem(QUOTES_STORAGE_KEY);
-    if (!raw) {
-      const defaults = createDefaultQuotes();
-      localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(defaults));
-      return defaults;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const validQuotes: QuoteItem[] = parsed
-        .map((item, i) => {
-          if (typeof item === 'string') {
-            return { id: `quote-${Date.now()}-${i}`, text: item };
-          }
-          return {
-            id: item.id || `quote-${Date.now()}-${i}`,
-            text: String(item.text || ''),
-            createdAt: item.createdAt,
-          };
-        })
-        .filter((q) => q.text.trim().length > 0);
-
-      if (validQuotes.length > 0) {
-        return validQuotes;
-      }
-    }
-    const defaults = createDefaultQuotes();
-    localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(defaults));
-    return defaults;
-  } catch {
-    return createDefaultQuotes();
-  }
-}
 
 function loadStoredProfile(): ProfileData {
   const emptyProfile: ProfileData = {
@@ -83,6 +44,16 @@ function loadStoredProfile(): ProfileData {
   }
 }
 
+function persistQuotesToStorage(quotes: QuoteItem[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotes));
+    localStorage.setItem(QUOTES_VERSION_KEY, getDefaultsSignature(INITIAL_QUOTES));
+  } catch {
+    // Storage quota or unavailable
+  }
+}
+
 interface AppContextType {
   quotes: QuoteItem[];
   profile: ProfileData;
@@ -100,7 +71,7 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [quotes, setQuotes] = useState<QuoteItem[]>(() => loadStoredQuotes());
+  const [quotes, setQuotes] = useState<QuoteItem[]>(() => loadAndMigrateStoredQuotes());
   const [profile, setProfile] = useState<ProfileData>(() => loadStoredProfile());
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
@@ -135,6 +106,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.history.pushState({}, '', target);
     }
     setCurrentPath(target);
+  }, []);
+
+  // Multi-tab and external storage change listener for instant synchronization
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === QUOTES_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            const deletedIds = loadDeletedDefaultIds();
+            const migrated = migrateQuoteCollection(parsed, deletedIds, INITIAL_QUOTES);
+            setQuotes(migrated);
+          }
+        } catch {
+          // ignore
+        }
+      } else if (e.key === PROFILE_STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          setProfile(parsed);
+        } catch {
+          // ignore
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   // Sync data with Firestore when user logs in with Google
@@ -187,19 +186,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!isMounted) return;
 
         if (!quotesSnap.empty) {
-          const remoteQuotes: QuoteItem[] = quotesSnap.docs.map((d) => {
+          const remoteQuotesRaw: QuoteItem[] = quotesSnap.docs.map((d) => {
             const data = d.data();
             return {
               id: data.id || d.id,
               text: data.text || '',
               createdAt: data.createdAt || Date.now(),
+              origin: data.origin,
+              defaultIndex: data.defaultIndex,
+              defaultId: data.defaultId,
+              isEdited: data.isEdited,
+              originalText: data.originalText,
             };
           });
-          setQuotes(remoteQuotes);
-          try {
-            localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(remoteQuotes));
-          } catch {
-            // ignore
+
+          // Run versioned migration on remote quotes
+          const deletedIds = loadDeletedDefaultIds();
+          const syncedQuotes = migrateQuoteCollection(remoteQuotesRaw, deletedIds, INITIAL_QUOTES);
+          setQuotes(syncedQuotes);
+          persistQuotesToStorage(syncedQuotes);
+
+          // Update any modified/migrated quotes back to Firestore
+          for (const q of syncedQuotes) {
+            const qDocRef = doc(db, 'users', user.uid, 'quotes', q.id);
+            await setDoc(
+              qDocRef,
+              {
+                id: q.id,
+                text: q.text,
+                createdAt: q.createdAt || Date.now(),
+                userId: user.uid,
+                origin: q.origin || 'default',
+                isEdited: Boolean(q.isEdited),
+                ...(q.defaultIndex !== undefined ? { defaultIndex: q.defaultIndex } : {}),
+                ...(q.defaultId ? { defaultId: q.defaultId } : {}),
+                ...(q.originalText ? { originalText: q.originalText } : {}),
+              },
+              { merge: true }
+            );
           }
         } else if (quotes.length > 0) {
           // Sync local quotes to Firestore if remote is empty
@@ -210,6 +234,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               text: q.text,
               createdAt: q.createdAt || Date.now(),
               userId: user.uid,
+              origin: q.origin || 'default',
+              isEdited: Boolean(q.isEdited),
+              ...(q.defaultIndex !== undefined ? { defaultIndex: q.defaultIndex } : {}),
+              ...(q.defaultId ? { defaultId: q.defaultId } : {}),
+              ...(q.originalText ? { originalText: q.originalText } : {}),
             });
           }
         }
@@ -314,16 +343,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const newQuote: QuoteItem = {
         id: cleanId,
         text: trimmed,
+        origin: 'user',
+        isEdited: false,
         createdAt: Date.now(),
       };
 
       setQuotes((prev) => {
         const next = [newQuote, ...prev];
-        try {
-          localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
+        persistQuotesToStorage(next);
         return next;
       });
 
@@ -336,6 +363,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             text: trimmed,
             createdAt: newQuote.createdAt,
             userId: user.uid,
+            origin: 'user',
+            isEdited: false,
           });
         } catch (err) {
           try {
@@ -370,17 +399,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: 'Another quote with this wording already exists.' };
       }
 
+      let updatedQuote: QuoteItem | undefined;
+
       setQuotes((prev) => {
-        const next = prev.map((q) => (q.id === id ? { ...q, text: trimmed } : q));
-        try {
-          localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
-        }
+        const next = prev.map((q) => {
+          if (q.id === id) {
+            updatedQuote = {
+              ...q,
+              text: trimmed,
+              isEdited: true, // Mark as user-edited so migrations preserve it
+            };
+            return updatedQuote;
+          }
+          return q;
+        });
+        persistQuotesToStorage(next);
         return next;
       });
 
-      if (user) {
+      if (user && updatedQuote) {
         try {
           const qDocRef = doc(db, 'users', user.uid, 'quotes', id);
           await setDoc(
@@ -389,6 +426,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               id,
               text: trimmed,
               userId: user.uid,
+              isEdited: true,
+              ...(updatedQuote.origin ? { origin: updatedQuote.origin } : {}),
             },
             { merge: true }
           );
@@ -409,12 +448,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteQuote = useCallback(
     async (id: string): Promise<{ success: boolean }> => {
       setQuotes((prev) => {
-        const next = prev.filter((q) => q.id !== id);
-        try {
-          localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // ignore
+        const target = prev.find((q) => q.id === id);
+        if (target) {
+          // If a default-provided quote was deleted, track it so it is never resurrected during future migrations
+          const isDefault =
+            target.origin === 'default' ||
+            target.id.startsWith('quote-init-') ||
+            (target.defaultId && target.defaultId.startsWith('quote-init-'));
+
+          if (isDefault) {
+            const deletedIds = loadDeletedDefaultIds();
+            const defId = target.defaultId || target.id;
+            deletedIds.add(defId);
+            saveDeletedDefaultIds(deletedIds);
+          }
         }
+
+        const next = prev.filter((q) => q.id !== id);
+        persistQuotesToStorage(next);
         return next;
       });
 
@@ -437,13 +488,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   );
 
   const resetQuotesToDefaults = useCallback(async () => {
-    const defaults = createDefaultQuotes();
+    // Clear deleted default IDs so all current defaults can be restored
+    saveDeletedDefaultIds(new Set());
+
+    const defaults = createDefaultQuotes(INITIAL_QUOTES);
     setQuotes(defaults);
-    try {
-      localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(defaults));
-    } catch {
-      // ignore
-    }
+    persistQuotesToStorage(defaults);
 
     if (user) {
       try {
@@ -454,6 +504,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             text: q.text,
             createdAt: q.createdAt || Date.now(),
             userId: user.uid,
+            origin: 'default',
+            isEdited: false,
+            defaultIndex: q.defaultIndex,
+            defaultId: q.defaultId,
+            originalText: q.originalText,
           });
         }
       } catch {

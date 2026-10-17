@@ -40,7 +40,7 @@ const AppContent: React.FC = () => {
           : 'relative w-full h-screen h-[100dvh] overflow-hidden bg-[#000000] select-none cursor-default'
       }
       role="region"
-      aria-label="EXIF - The Soul Within"
+      aria-label="ECHO — Remember Who You Are."
     >
       {/* 1. Pure Black Universe with Tiny Twinkling White Stars & Galaxies (Running in Viewport) */}
       <CosmicCanvas />
@@ -53,7 +53,22 @@ const AppContent: React.FC = () => {
         <ProfileIcon onNavigate={() => navigate('/profile')} />
       )}
 
-      {/* 4. Dedicated Profile Management Page */}
+      {/* 4. Discreet Branding in Top-Right Corner on Cosmic Homepage */}
+      {!isSubpageOpen && (
+        <header
+          className="fixed z-20 pointer-events-none select-none text-right font-mono"
+          style={{
+            top: 'max(16px, env(safe-area-inset-top, 16px))',
+            right: 'max(16px, env(safe-area-inset-right, 16px))',
+          }}
+        >
+          <h1 className="text-xs sm:text-sm tracking-[0.26em] uppercase text-[#D8D8D8] font-normal leading-tight">
+            ECHO
+          </h1>
+        </header>
+      )}
+
+      {/* 5. Dedicated Profile Management Page */}
       {isProfileOpen && (
         <ProfilePage
           onBack={() => navigate('/')}

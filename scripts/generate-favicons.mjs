@@ -7,56 +7,35 @@ if (!fs.existsSync(PUBLIC_DIR)) {
   fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 }
 
-// 1. Generate Master SVG for EXIF (The Soul Within)
-// Clean, bold, iconic monospace "E" with cosmic soul star mark on deep black
+// Minimal, monochrome, bold geometric 'E' monogram on pure black background
 function createIconSvg(size, isAppleTouch = false) {
-  const rx = isAppleTouch ? 0 : Math.round(size * 0.2);
-  const strokeW = Math.max(1, Math.round(size * 0.015));
-
-  // Scale coordinates to target size
+  const rx = isAppleTouch ? 0 : Math.round(size * 0.12);
   const s = size / 512;
-  
-  // Glyph dimensions (based on 512 grid)
-  // Vertical stem: x: 136..196 (width 60), y: 116..396 (height 280)
-  // Top bar: y: 116..170 (height 54), x: 136..376 (width 240)
-  // Mid bar: y: 229..283 (height 54), x: 136..336 (width 200)
-  // Bottom bar: y: 342..396 (height 54), x: 136..376 (width 240)
-  // Cosmic soul spark: diamond at x: 388, y: 256, r: 24
-  
+
   const pathD = `
-    M ${136 * s} ${116 * s}
-    H ${376 * s}
-    V ${170 * s}
+    M ${126 * s} ${96 * s}
+    H ${386 * s}
+    V ${156 * s}
     H ${196 * s}
-    V ${229 * s}
-    H ${336 * s}
-    V ${283 * s}
+    V ${226 * s}
+    H ${346 * s}
+    V ${286 * s}
     H ${196 * s}
-    V ${342 * s}
-    H ${376 * s}
-    V ${396 * s}
-    H ${136 * s}
+    V ${356 * s}
+    H ${386 * s}
+    V ${416 * s}
+    H ${126 * s}
     Z
   `;
 
-  // Cosmic soul diamond at (380, 256)
-  const sparkD = size >= 64 ? `
-    <path d="M ${380 * s} ${226 * s} Q ${380 * s} ${256 * s} ${410 * s} ${256 * s} Q ${380 * s} ${256 * s} ${380 * s} ${286 * s} Q ${380 * s} ${256 * s} ${350 * s} ${256 * s} Q ${380 * s} ${256 * s} ${380 * s} ${226 * s} Z" fill="#E8EDF5" />
-  ` : '';
-
-  return `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
-      <rect width="${size}" height="${size}" rx="${rx}" fill="#000000" />
-      <rect x="${strokeW / 2}" y="${strokeW / 2}" width="${size - strokeW}" height="${size - strokeW}" rx="${rx}" fill="none" stroke="rgba(255, 255, 255, 0.12)" stroke-width="${strokeW}" />
-      <path d="${pathD.trim()}" fill="#FFFFFF" />
-      ${sparkD}
-    </svg>
-  `;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  <rect width="${size}" height="${size}" rx="${rx}" fill="#000000" />
+  <path d="${pathD.trim()}" fill="#FFFFFF" />
+</svg>`;
 }
 
 // Helper to create ICO binary from PNG buffers
 function createIco(pngBuffers) {
-  // pngBuffers: array of { width, height, buffer }
   const count = pngBuffers.length;
   const headerSize = 6;
   const dirEntrySize = 16;
@@ -82,11 +61,11 @@ function createIco(pngBuffers) {
     offset += item.buffer.length;
   }
 
-  return Buffer.concat([header, ...entries, ...pngBuffers.map(p => p.buffer)]);
+  return Buffer.concat([header, ...entries, ...pngBuffers.map((p) => p.buffer)]);
 }
 
 async function buildFavicons() {
-  console.log('Generating EXIF favicon package...');
+  console.log('Generating ECHO favicon package...');
 
   // 1. Generate PNGs at required resolutions
   const sizes = [
@@ -105,7 +84,7 @@ async function buildFavicons() {
     const buf = await sharp(Buffer.from(svg))
       .png({ compressionLevel: 9 })
       .toBuffer();
-    
+
     fs.writeFileSync(path.join(PUBLIC_DIR, item.name), buf);
     pngMap[item.size] = buf;
     console.log(`Generated: ${item.name} (${item.size}x${item.size})`);
@@ -122,9 +101,9 @@ async function buildFavicons() {
 
   // 3. Generate site.webmanifest
   const webmanifest = {
-    name: "EXIF - The Soul Within",
-    short_name: "EXIF",
-    description: "An endless cosmic environment where personal affirmations emerge spontaneously from an infinite black space.",
+    name: "ECHO",
+    short_name: "ECHO",
+    description: "ECHO — Remember Who You Are. An endless cosmic environment where personal affirmations emerge spontaneously from an infinite black space.",
     icons: [
       {
         src: "/android-chrome-192x192.png",
@@ -148,7 +127,7 @@ async function buildFavicons() {
   );
   console.log('Generated: site.webmanifest');
 
-  // Also write SVG version for modern browser vector favicon support
+  // 4. Generate master vector SVG for browser tab vector icon support
   fs.writeFileSync(
     path.join(PUBLIC_DIR, 'favicon.svg'),
     createIconSvg(512, false)
@@ -156,7 +135,7 @@ async function buildFavicons() {
   console.log('Generated: favicon.svg');
 }
 
-buildFavicons().catch(err => {
+buildFavicons().catch((err) => {
   console.error('Error generating favicons:', err);
   process.exit(1);
 });

@@ -38,12 +38,47 @@ export const QuoteSpace: React.FC = () => {
   const instanceCounterRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(true);
 
-  // Keep quotesRef up to date with live quotes collection
+  // Keep quotesRef up to date with live quotes collection and allow obsolete visible quotes to fade away gracefully
   useEffect(() => {
     quotesRef.current = quotes;
-    // Clean pool of any deleted quote IDs
-    const currentValidIds = new Set(quotes.map((q) => q.id));
-    poolRef.current = poolRef.current.filter((id) => currentValidIds.has(id));
+    const currentQuotesMap = new Map(quotes.map((q) => [q.id, q]));
+    poolRef.current = poolRef.current.filter((id) => currentQuotesMap.has(id));
+
+    // When the collection changes, allow obsolete visible quotes to fade away gracefully:
+    // Any active quote whose ID was deleted, or whose text changed in the collection,
+    // transitions smoothly into its fade-out phase.
+    setActiveQuotes((prevActive) => {
+      if (prevActive.length === 0) return prevActive;
+      const now = performance.now();
+      let hasChanges = false;
+
+      const updated = prevActive.map((instance) => {
+        const liveQuote = currentQuotesMap.get(instance.quoteId);
+        const isObsolete = !liveQuote || liveQuote.text !== instance.text;
+
+        if (isObsolete) {
+          const elapsed = now - instance.startTime;
+          const currentProgress = elapsed / instance.durationMs;
+
+          if (currentProgress < instance.fadeOutFraction) {
+            hasChanges = true;
+            const gracefulFadeDurationMs = 1800;
+            const remainingFraction = Math.max(0.01, 1 - instance.fadeOutFraction);
+            const newDuration = gracefulFadeDurationMs / remainingFraction;
+            const newStartTime = now - (instance.fadeOutFraction * newDuration);
+
+            return {
+              ...instance,
+              startTime: newStartTime,
+              durationMs: newDuration,
+            };
+          }
+        }
+        return instance;
+      });
+
+      return hasChanges ? updated : prevActive;
+    });
   }, [quotes]);
 
   // Keep activeQuotesRef synchronized with state

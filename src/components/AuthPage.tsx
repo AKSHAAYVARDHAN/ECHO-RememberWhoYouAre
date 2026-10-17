@@ -41,10 +41,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
 
         <div className="flex items-baseline gap-2 select-none">
           <span className="text-[11px] tracking-[0.2em] uppercase text-[#666666] font-medium">
-            EXIF
+            ECHO
           </span>
           <span className="hidden sm:inline text-[10px] tracking-[0.14em] text-[#444444]">
-            · The Soul Within
+            · Remember Who You Are.
           </span>
         </div>
       </header>
@@ -61,10 +61,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
           {/* Brand Header */}
           <div className="text-center space-y-2">
             <h1 className="text-xl sm:text-2xl tracking-[0.3em] uppercase text-[#EDEDED] font-normal">
-              EXIF
+              ECHO
             </h1>
             <p className="text-[11px] tracking-[0.2em] uppercase text-[#666666]">
-              The Soul Within
+              Remember Who You Are.
             </p>
             <div className="w-8 h-[1px] bg-[#222222] mx-auto mt-3" />
           </div>
@@ -270,7 +270,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
               {/* Guest / Offline Mode Note */}
               <div className="text-center space-y-2">
                 <p className="text-[11px] text-[#555555] leading-relaxed">
-                  You can also continue using EXIF anonymously. Your affirmations and profile remain stored locally in your browser.
+                  You can also continue using ECHO anonymously. Your affirmations and profile remain stored locally in your browser.
                 </p>
                 <button
                   type="button"
@@ -287,7 +287,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
 
       {/* Footer Info */}
       <footer className="py-6 text-center border-t border-[#101010] text-[10px] uppercase tracking-widest text-[#444444]">
-        EXIF · The Soul Within · Secure Cloud Authentication
+        ECHO · Remember Who You Are. · Secure Cloud Authentication
       </footer>
     </div>
   );

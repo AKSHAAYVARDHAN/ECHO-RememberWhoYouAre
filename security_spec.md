@@ -1,4 +1,4 @@
-# Security Spec: EXIF — The Soul Within
+# Security Spec: ECHO — Remember Who You Are.
 
 ## 1. Data Invariants
 - Each user profile is strictly private to `/users/{userId}` where `{userId}` must equal `request.auth.uid`.
