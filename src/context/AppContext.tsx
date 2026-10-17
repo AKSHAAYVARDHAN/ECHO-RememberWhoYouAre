@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { INITIAL_QUOTES, QuoteItem, ProfileData, getDefaultsSignature } from '../types/quote';
 import {
@@ -19,20 +19,44 @@ import {
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from './AuthContext';
 
-function loadStoredProfile(): ProfileData {
-  const emptyProfile: ProfileData = {
-    name: '',
-    bio: '',
-    location: '',
-  };
-  if (typeof window === 'undefined') {
-    return emptyProfile;
-  }
+// ---------------------------------------------------------------------------
+// UID-namespaced localStorage helpers
+// All user-specific data is stored under keys scoped to the Firebase UID.
+// This prevents one account's data from leaking to another on the same device.
+// ---------------------------------------------------------------------------
+
+function profileKeyForUid(uid: string): string {
+  return `${PROFILE_STORAGE_KEY}__${uid}`;
+}
+
+function quotesKeyForUid(uid: string): string {
+  return `${QUOTES_STORAGE_KEY}__${uid}`;
+}
+
+function quotesVersionKeyForUid(uid: string): string {
+  return `${QUOTES_VERSION_KEY}__${uid}`;
+}
+
+/** Read and migrate the stored quote collection for a specific user. */
+function loadQuotesForUid(uid: string): QuoteItem[] | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(PROFILE_STORAGE_KEY);
-    if (!raw) {
-      return emptyProfile;
-    }
+    const raw = localStorage.getItem(quotesKeyForUid(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed as QuoteItem[];
+  } catch {
+    return null;
+  }
+}
+
+/** Read stored profile for a specific user. */
+function loadProfileForUid(uid: string): ProfileData | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(profileKeyForUid(uid));
+    if (!raw) return null;
     const parsed = JSON.parse(raw);
     return {
       name: typeof parsed.name === 'string' ? parsed.name : '',
@@ -40,15 +64,24 @@ function loadStoredProfile(): ProfileData {
       location: typeof parsed.location === 'string' ? parsed.location : '',
     };
   } catch {
-    return emptyProfile;
+    return null;
   }
 }
 
-function persistQuotesToStorage(quotes: QuoteItem[]): void {
+const EMPTY_PROFILE: ProfileData = { name: '', bio: '', location: '' };
+
+function persistQuotesToStorage(quotes: QuoteItem[], uid?: string | null): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotes));
-    localStorage.setItem(QUOTES_VERSION_KEY, getDefaultsSignature(INITIAL_QUOTES));
+    if (uid) {
+      // Namespaced write for authenticated users
+      localStorage.setItem(quotesKeyForUid(uid), JSON.stringify(quotes));
+      localStorage.setItem(quotesVersionKeyForUid(uid), getDefaultsSignature(INITIAL_QUOTES));
+    } else {
+      // Anonymous / signed-out: use the shared key
+      localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotes));
+      localStorage.setItem(QUOTES_VERSION_KEY, getDefaultsSignature(INITIAL_QUOTES));
+    }
   } catch {
     // Storage quota or unavailable
   }
@@ -71,8 +104,12 @@ const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+
+  // Track the UID that is currently reflected in state so we can detect switches.
+  const activeUidRef = useRef<string | null>(null);
+
   const [quotes, setQuotes] = useState<QuoteItem[]>(() => loadAndMigrateStoredQuotes());
-  const [profile, setProfile] = useState<ProfileData>(() => loadStoredProfile());
+  const [profile, setProfile] = useState<ProfileData>(() => EMPTY_PROFILE);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const [currentPath, setCurrentPath] = useState<string>(() => {
@@ -136,10 +173,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Sync data with Firestore when user logs in with Google
+  // -------------------------------------------------------------------------
+  // React to authentication state changes
+  // -------------------------------------------------------------------------
   useEffect(() => {
+    // --- SIGN-OUT: user became null ---
     if (!user) {
+      // Only reset if we were previously tracking a signed-in user.
+      if (activeUidRef.current !== null) {
+        activeUidRef.current = null;
+        // Immediately wipe state so no previous account's data is visible.
+        setProfile(EMPTY_PROFILE);
+        setQuotes(loadAndMigrateStoredQuotes()); // loads from shared (anonymous) key
+        setIsSyncing(false);
+      }
       return;
+    }
+
+    // --- SIGN-IN or ACCOUNT SWITCH ---
+    const uid = user.uid;
+
+    // Immediately clear stale state from any previous account and show
+    // locally cached data for the incoming account (if any) while the
+    // network request is in flight.
+    if (activeUidRef.current !== uid) {
+      activeUidRef.current = uid;
+
+      // Load this account's local cache (or fall back to clean defaults).
+      const cachedProfile = loadProfileForUid(uid);
+      const cachedQuotes = loadQuotesForUid(uid);
+
+      setProfile(cachedProfile ?? EMPTY_PROFILE);
+      setQuotes(cachedQuotes ?? createDefaultQuotes(INITIAL_QUOTES));
     }
 
     let isMounted = true;
@@ -147,43 +212,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const syncUserData = async () => {
       try {
-        const userDocRef = doc(db, 'users', user.uid);
+        const userDocRef = doc(db, 'users', uid);
         const userDocSnap = await getDoc(userDocRef);
 
-        if (!isMounted) return;
+        // Guard: bail out if component unmounted OR user has switched again.
+        if (!isMounted || activeUidRef.current !== uid) return;
 
         if (userDocSnap.exists()) {
           const remoteData = userDocSnap.data();
           const syncedProfile: ProfileData = {
-            name: remoteData.displayName || user.displayName || profile.name || '',
-            bio: remoteData.bio || profile.bio || '',
-            location: remoteData.location || profile.location || '',
+            name: remoteData.displayName || user.displayName || '',
+            bio: remoteData.bio || '',
+            location: remoteData.location || '',
           };
           setProfile(syncedProfile);
           try {
-            localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(syncedProfile));
+            localStorage.setItem(profileKeyForUid(uid), JSON.stringify(syncedProfile));
           } catch {
             // ignore
           }
         } else {
-          // Initialize user doc in Firestore
+          // First time this account is seen: initialize from Google display name.
           const initialProfileData = {
-            uid: user.uid,
-            displayName: profile.name || user.displayName || '',
+            uid,
+            displayName: user.displayName || '',
             email: user.email || '',
             photoURL: user.photoURL || '',
-            bio: profile.bio || '',
-            location: profile.location || '',
+            bio: '',
+            location: '',
             updatedAt: new Date().toISOString(),
           };
           await setDoc(userDocRef, initialProfileData);
+          // Reflect the Google display name locally.
+          const freshProfile: ProfileData = {
+            name: user.displayName || '',
+            bio: '',
+            location: '',
+          };
+          if (isMounted && activeUidRef.current === uid) {
+            setProfile(freshProfile);
+            try {
+              localStorage.setItem(profileKeyForUid(uid), JSON.stringify(freshProfile));
+            } catch {
+              // ignore
+            }
+          }
         }
 
         // Fetch quotes subcollection
-        const quotesCollectionRef = collection(db, 'users', user.uid, 'quotes');
+        const quotesCollectionRef = collection(db, 'users', uid, 'quotes');
         const quotesSnap = await getDocs(quotesCollectionRef);
 
-        if (!isMounted) return;
+        // Guard again after second await.
+        if (!isMounted || activeUidRef.current !== uid) return;
 
         if (!quotesSnap.empty) {
           const remoteQuotesRaw: QuoteItem[] = quotesSnap.docs.map((d) => {
@@ -204,18 +285,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const deletedIds = loadDeletedDefaultIds();
           const syncedQuotes = migrateQuoteCollection(remoteQuotesRaw, deletedIds, INITIAL_QUOTES);
           setQuotes(syncedQuotes);
-          persistQuotesToStorage(syncedQuotes);
+          persistQuotesToStorage(syncedQuotes, uid);
 
           // Update any modified/migrated quotes back to Firestore
           for (const q of syncedQuotes) {
-            const qDocRef = doc(db, 'users', user.uid, 'quotes', q.id);
+            if (!isMounted || activeUidRef.current !== uid) break;
+            const qDocRef = doc(db, 'users', uid, 'quotes', q.id);
             await setDoc(
               qDocRef,
               {
                 id: q.id,
                 text: q.text,
                 createdAt: q.createdAt || Date.now(),
-                userId: user.uid,
+                userId: uid,
                 origin: q.origin || 'default',
                 isEdited: Boolean(q.isEdited),
                 ...(q.defaultIndex !== undefined ? { defaultIndex: q.defaultIndex } : {}),
@@ -225,15 +307,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               { merge: true }
             );
           }
-        } else if (quotes.length > 0) {
-          // Sync local quotes to Firestore if remote is empty
-          for (const q of quotes) {
-            const qDocRef = doc(db, 'users', user.uid, 'quotes', q.id);
+        } else {
+          // Remote quotes collection is empty: seed it from whatever is in state
+          // for this user (could be their cached quotes or clean defaults).
+          const currentQuotes: QuoteItem[] = loadQuotesForUid(uid) ?? createDefaultQuotes(INITIAL_QUOTES);
+          for (const q of currentQuotes) {
+            if (!isMounted || activeUidRef.current !== uid) break;
+            const qDocRef = doc(db, 'users', uid, 'quotes', q.id);
             await setDoc(qDocRef, {
               id: q.id,
               text: q.text,
               createdAt: q.createdAt || Date.now(),
-              userId: user.uid,
+              userId: uid,
               origin: q.origin || 'default',
               isEdited: Boolean(q.isEdited),
               ...(q.defaultIndex !== undefined ? { defaultIndex: q.defaultIndex } : {}),
@@ -256,6 +341,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       isMounted = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // Profile update and storage
@@ -283,7 +369,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setProfile(updated);
       try {
-        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
+        if (user) {
+          // Namespaced write for authenticated users
+          localStorage.setItem(profileKeyForUid(user.uid), JSON.stringify(updated));
+        } else {
+          localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(updated));
+        }
       } catch {
         // Storage quota
       }
@@ -350,7 +441,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setQuotes((prev) => {
         const next = [newQuote, ...prev];
-        persistQuotesToStorage(next);
+        persistQuotesToStorage(next, user?.uid);
         return next;
       });
 
@@ -413,7 +504,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
           return q;
         });
-        persistQuotesToStorage(next);
+        persistQuotesToStorage(next, user?.uid);
         return next;
       });
 
@@ -447,6 +538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteQuote = useCallback(
     async (id: string): Promise<{ success: boolean }> => {
+      const currentUid = user?.uid ?? null;
       setQuotes((prev) => {
         const target = prev.find((q) => q.id === id);
         if (target) {
@@ -465,7 +557,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         const next = prev.filter((q) => q.id !== id);
-        persistQuotesToStorage(next);
+        persistQuotesToStorage(next, currentUid);
         return next;
       });
 
@@ -493,7 +585,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const defaults = createDefaultQuotes(INITIAL_QUOTES);
     setQuotes(defaults);
-    persistQuotesToStorage(defaults);
+    persistQuotesToStorage(defaults, user?.uid);
 
     if (user) {
       try {
