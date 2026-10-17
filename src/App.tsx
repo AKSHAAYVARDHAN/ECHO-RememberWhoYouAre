@@ -11,6 +11,8 @@ import { ProfilePage } from './components/ProfilePage';
 import { AuthPage } from './components/AuthPage';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
+import { Analytics } from '@vercel/analytics/react';
+
 
 const AppContent: React.FC = () => {
   const { currentPath, navigate } = useApp();
@@ -92,6 +94,7 @@ export default function App() {
     <AuthProvider>
       <AppProvider>
         <AppContent />
+        <Analytics />
       </AppProvider>
     </AuthProvider>
   );
