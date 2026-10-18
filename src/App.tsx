@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { CosmicCanvas } from './components/CosmicCanvas';
 import { QuoteSpace } from './components/QuoteSpace';
 import { ProfileIcon } from './components/ProfileIcon';

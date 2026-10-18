@@ -112,12 +112,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [profile, setProfile] = useState<ProfileData>(() => EMPTY_PROFILE);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
+  const normalizePath = (rawPath: string): string => {
+    const trimmed = (rawPath || '').trim();
+    const cleaned = trimmed.length > 1 ? trimmed.replace(/\/+$/, '') : trimmed;
+    if (cleaned === '/profile' || cleaned === '/auth') {
+      return cleaned;
+    }
+    return '/';
+  };
+
   const [currentPath, setCurrentPath] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      const p = window.location.pathname;
-      if (p === '/profile' || p === '/auth') {
-        return p;
-      }
+      return normalizePath(window.location.pathname);
     }
     return '/';
   });
@@ -125,12 +131,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Routing synchronisation with browser history
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path === '/profile' || path === '/auth') {
-        setCurrentPath(path);
-      } else {
-        setCurrentPath('/');
-      }
+      setCurrentPath(normalizePath(window.location.pathname));
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -138,7 +139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, []);
 
   const navigate = useCallback((path: string) => {
-    const target = path === '/profile' || path === '/auth' ? path : '/';
+    const target = normalizePath(path);
     if (window.location.pathname !== target) {
       window.history.pushState({}, '', target);
     }
