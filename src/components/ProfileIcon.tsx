@@ -12,20 +12,28 @@ interface ProfileIconProps {
 }
 
 export const ProfileIcon: React.FC<ProfileIconProps> = ({ onNavigate }) => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
   return (
     <button
       type="button"
       onClick={onNavigate}
-      aria-label={user ? `Signed in as ${user.displayName || user.email}. Manage profile and affirmations` : 'Manage profile and affirmations'}
+      aria-label={
+        loading
+          ? 'Resolving authentication session...'
+          : user
+          ? `Signed in as ${user.displayName || user.email}. Manage profile and affirmations`
+          : 'Manage profile and affirmations'
+      }
       className="fixed z-20 flex items-center justify-center w-9 h-9 p-1.5 rounded-sm text-[#A0A0A0] hover:text-[#E8E8E8] focus-visible:text-[#E8E8E8] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#777777] transition-colors duration-200 cursor-pointer select-none"
       style={{
         top: 'max(16px, env(safe-area-inset-top, 16px))',
         left: 'max(16px, env(safe-area-inset-left, 16px))',
       }}
     >
-      {user?.photoURL ? (
+      {loading ? (
+        <div className="w-3.5 h-3.5 rounded-full border border-[#444444] border-t-[#CCCCCC] animate-spin" aria-hidden="true" />
+      ) : user?.photoURL ? (
         <img
           src={user.photoURL}
           alt={user.displayName || 'User profile'}

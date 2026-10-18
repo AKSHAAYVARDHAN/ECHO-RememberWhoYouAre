@@ -103,13 +103,37 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
-  // Track the UID that is currently reflected in state so we can detect switches.
-  const activeUidRef = useRef<string | null>(null);
+  // Helper to read last active UID if known, preventing flash of unauthenticated state during session restore
+  const getInitialActiveUid = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    try {
+      return localStorage.getItem('echo_last_active_uid');
+    } catch {
+      return null;
+    }
+  };
 
-  const [quotes, setQuotes] = useState<QuoteItem[]>(() => loadAndMigrateStoredQuotes());
-  const [profile, setProfile] = useState<ProfileData>(() => EMPTY_PROFILE);
+  const initialUid = getInitialActiveUid();
+  const activeUidRef = useRef<string | null>(initialUid);
+
+  const [quotes, setQuotes] = useState<QuoteItem[]>(() => {
+    if (initialUid) {
+      const cached = loadQuotesForUid(initialUid);
+      if (cached && cached.length > 0) return cached;
+    }
+    return loadAndMigrateStoredQuotes();
+  });
+
+  const [profile, setProfile] = useState<ProfileData>(() => {
+    if (initialUid) {
+      const cached = loadProfileForUid(initialUid);
+      if (cached) return cached;
+    }
+    return EMPTY_PROFILE;
+  });
+
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
 
   const normalizePath = (rawPath: string): string => {
@@ -178,12 +202,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // React to authentication state changes
   // -------------------------------------------------------------------------
   useEffect(() => {
-    // --- SIGN-OUT: user became null ---
+    // --- SIGN-OUT or UNCONFIRMED STATE ---
     if (!user) {
-      // Only reset if we were previously tracking a signed-in user.
+      // Do NOT wipe state if Firebase Auth is still actively resolving/restoring the session
+      if (authLoading) {
+        return;
+      }
+
+      // Only reset if we were previously tracking a signed-in user and auth resolution finished
       if (activeUidRef.current !== null) {
         activeUidRef.current = null;
-        // Immediately wipe state so no previous account's data is visible.
+        try {
+          localStorage.removeItem('echo_last_active_uid');
+        } catch {
+          // ignore
+        }
+        // Immediately wipe state so no previous account's data is visible
         setProfile(EMPTY_PROFILE);
         setQuotes(loadAndMigrateStoredQuotes()); // loads from shared (anonymous) key
         setIsSyncing(false);

@@ -4,7 +4,7 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -16,6 +16,22 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
+
+// Explicitly configure browserLocalPersistence so the authenticated session
+// is written to localStorage and survives across hours, browser restarts, and
+// installed PWA launches without depending on volatile IndexedDB connection states.
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.warn('Firebase setPersistence to browserLocalPersistence failed:', error);
+  });
+
+  // Request browser storage persistence so PWA/browser data is not evicted during inactivity
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().catch(() => {
+      // Ignored if browser disallows
+    });
+  }
+}
 
 // Configure Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();

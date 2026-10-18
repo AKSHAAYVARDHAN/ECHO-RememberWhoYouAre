@@ -26,7 +26,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
     isSyncing,
   } = useApp();
 
-  const { user, isSigningIn, signInWithGoogle, signOutUser, authError, clearAuthError } = useAuth();
+  const { user, loading: authLoading, isSigningIn, signInWithGoogle, signOutUser, authError, clearAuthError } = useAuth();
 
   // Local state for profile form fields
   const [formData, setFormData] = useState<ProfileData>({
@@ -170,7 +170,23 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
             )}
           </div>
 
-          {user ? (
+          {authLoading ? (
+            <div className="bg-[#080808] border border-[#1A1A1A] p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-[#141414] border border-[#2A2A2A] flex items-center justify-center">
+                  <div className="w-4 h-4 border-2 border-[#444444] border-t-[#CCCCCC] rounded-full animate-spin" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium text-[#CCCCCC]">
+                      Restoring Secure Session...
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-[#555555]">Checking persistent Google authentication</p>
+                </div>
+              </div>
+            </div>
+          ) : user ? (
             <div className="bg-[#080808] border border-[#1A1A1A] p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {user.photoURL ? (

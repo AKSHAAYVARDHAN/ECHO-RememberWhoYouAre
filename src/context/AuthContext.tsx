@@ -11,6 +11,8 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
+  setPersistence,
+  browserLocalPersistence,
   AuthError,
 } from 'firebase/auth';
 import { auth, googleProvider } from '../lib/firebase';
@@ -86,6 +88,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then((result) => {
         if (isMounted && result?.user) {
           setUser(result.user);
+          if (typeof window !== 'undefined') {
+            try {
+              localStorage.setItem('echo_last_active_uid', result.user.uid);
+            } catch {
+              // ignore
+            }
+          }
           setAuthError(null);
           setAuthErrorCode(null);
         }
@@ -98,12 +107,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (isMounted) {
-        setUser(currentUser);
-        setLoading(false);
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser) => {
+        if (isMounted) {
+          setUser(currentUser);
+          if (typeof window !== 'undefined') {
+            try {
+              if (currentUser) {
+                localStorage.setItem('echo_last_active_uid', currentUser.uid);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          setLoading(false);
+        }
+      },
+      (error) => {
+        console.warn('Firebase onAuthStateChanged error during session restore:', error);
+        if (isMounted) {
+          // If a network blip occurs during token refresh (e.g. reopening app after hours offline),
+          // check if Firebase Auth instance still retains currentUser locally before dropping session.
+          if (auth.currentUser) {
+            setUser(auth.currentUser);
+          } else {
+            setUser(null);
+          }
+          setLoading(false);
+        }
       }
-    });
+    );
 
     return () => {
       isMounted = false;
@@ -121,6 +155,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSigningIn(true);
       setAuthError(null);
       setAuthErrorCode(null);
+
+      // Ensure browserLocalPersistence is active on this auth instance prior to sign-in
+      try {
+        await setPersistence(auth, browserLocalPersistence);
+      } catch (pErr) {
+        console.warn('Could not confirm browserLocalPersistence before sign-in:', pErr);
+      }
 
       // Mobile check or explicit redirect preference
       const isMobile =
@@ -145,6 +186,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const result = await signInWithPopup(auth, googleProvider);
         setUser(result.user);
+        if (typeof window !== 'undefined' && result.user) {
+          try {
+            localStorage.setItem('echo_last_active_uid', result.user.uid);
+          } catch {
+            // ignore
+          }
+        }
         setIsSigningIn(false);
         return { success: true };
       } catch (err: unknown) {
@@ -179,6 +227,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setAuthError(null);
       setAuthErrorCode(null);
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem('echo_last_active_uid');
+        } catch {
+          // ignore
+        }
+      }
     } catch (err: unknown) {
       console.error('Sign-out error:', err);
     }
