@@ -17,21 +17,34 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 // Initialize Firebase Authentication
 export const auth = getAuth(app);
 
-// Explicitly configure browserLocalPersistence so the authenticated session
-// is written to localStorage and survives across hours, browser restarts, and
-// installed PWA launches without depending on volatile IndexedDB connection states.
-if (typeof window !== 'undefined') {
-  setPersistence(auth, browserLocalPersistence).catch((error) => {
-    console.warn('Firebase setPersistence to browserLocalPersistence failed:', error);
-  });
+// authReadyPromise: resolves once browserLocalPersistence is confirmed active.
+//
+// CRITICAL — this must be awaited by AuthContext before subscribing to
+// onAuthStateChanged.  If onAuthStateChanged is subscribed while setPersistence
+// is still in-flight, Firebase Auth may have already read its persisted session
+// using the wrong (session-only) default, causing a spurious signed-out event
+// the next time the app is opened after the tab/PWA was closed.
+export const authReadyPromise: Promise<void> = (async () => {
+  if (typeof window === 'undefined') return;
 
-  // Request browser storage persistence so PWA/browser data is not evicted during inactivity
-  if (navigator.storage && navigator.storage.persist) {
-    navigator.storage.persist().catch(() => {
-      // Ignored if browser disallows
-    });
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+  } catch (error) {
+    // Log but do not block — Auth will still work; worst case is session-only
+    // persistence for this load which is better than crashing the app.
+    console.warn('Firebase: setPersistence(browserLocalPersistence) failed:', error);
   }
-}
+
+  // Request durable storage so the browser does not evict our IndexedDB/localStorage
+  // under storage pressure (important for installed PWAs left idle for hours).
+  if (navigator.storage && navigator.storage.persist) {
+    try {
+      await navigator.storage.persist();
+    } catch {
+      // Non-fatal — browser may deny the request silently.
+    }
+  }
+})();
 
 // Configure Google Auth Provider
 export const googleProvider = new GoogleAuthProvider();

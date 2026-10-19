@@ -15,7 +15,7 @@ import {
   browserLocalPersistence,
   AuthError,
 } from 'firebase/auth';
-import { auth, googleProvider } from '../lib/firebase';
+import { auth, googleProvider, authReadyPromise } from '../lib/firebase';
 
 interface AuthContextType {
   user: User | null;
@@ -80,68 +80,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authError, setAuthError] = useState<string | null>(null);
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
 
-  // Check for redirect result on initialization
+  // -------------------------------------------------------------------------
+  // Authentication initialization
+  //
+  // Order of operations matters critically here:
+  //   1. Await authReadyPromise (setPersistence to browserLocalPersistence)
+  //      BEFORE subscribing to onAuthStateChanged.
+  //      If we subscribe before setPersistence resolves, Firebase Auth may have
+  //      already read its persisted session under the wrong default persistence
+  //      (browserSessionPersistence), causing it to emit null on the next cold
+  //      start — which is the root cause of the spurious sign-out.
+  //   2. Await getRedirectResult() BEFORE subscribing to onAuthStateChanged.
+  //      On redirect sign-in flows the credential must be fully committed to
+  //      Firebase Auth before the listener runs; otherwise the listener fires
+  //      with null and then re-fires with the user, creating a visible flash.
+  //   3. In the error callback, never drop the user to null on transient network
+  //      failures. Firebase retains the cached user and will re-emit them once
+  //      the network recovers. Only a genuine session revocation should result
+  //      in null.
+  // -------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
+    let unsubscribe: (() => void) | null = null;
 
-    getRedirectResult(auth)
-      .then((result) => {
-        if (isMounted && result?.user) {
-          setUser(result.user);
-          if (typeof window !== 'undefined') {
-            try {
-              localStorage.setItem('echo_last_active_uid', result.user.uid);
-            } catch {
-              // ignore
-            }
+    const initAuth = async () => {
+      // Step 1: Ensure browserLocalPersistence is active.
+      await authReadyPromise;
+      if (!isMounted) return;
+
+      // Step 2: Consume any pending redirect sign-in result.
+      try {
+        const redirectResult = await getRedirectResult(auth);
+        if (isMounted && redirectResult?.user) {
+          try {
+            localStorage.setItem('echo_last_active_uid', redirectResult.user.uid);
+          } catch {
+            // ignore storage errors
           }
           setAuthError(null);
           setAuthErrorCode(null);
+          // onAuthStateChanged below will emit the user — no double-set needed.
         }
-      })
-      .catch((err: unknown) => {
+      } catch (err: unknown) {
         if (isMounted && err && typeof err === 'object' && 'code' in err) {
           const formatted = getReadableErrorMessage(err as AuthError);
           setAuthError(formatted.message);
           setAuthErrorCode(formatted.code);
         }
-      });
+      }
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (currentUser) => {
-        if (isMounted) {
+      if (!isMounted) return;
+
+      // Step 3: Subscribe to auth state changes. Persistence is guaranteed
+      // active and any redirect credential is committed — no race conditions.
+      unsubscribe = onAuthStateChanged(
+        auth,
+        (currentUser) => {
+          if (!isMounted) return;
           setUser(currentUser);
-          if (typeof window !== 'undefined') {
+          if (currentUser) {
             try {
-              if (currentUser) {
-                localStorage.setItem('echo_last_active_uid', currentUser.uid);
-              }
+              localStorage.setItem('echo_last_active_uid', currentUser.uid);
             } catch {
               // ignore
             }
           }
           setLoading(false);
-        }
-      },
-      (error) => {
-        console.warn('Firebase onAuthStateChanged error during session restore:', error);
-        if (isMounted) {
-          // If a network blip occurs during token refresh (e.g. reopening app after hours offline),
-          // check if Firebase Auth instance still retains currentUser locally before dropping session.
-          if (auth.currentUser) {
-            setUser(auth.currentUser);
-          } else {
-            setUser(null);
-          }
+        },
+        (error) => {
+          // This error callback fires on token-refresh failures (e.g. network
+          // went away while the app was in the background for several hours).
+          // DO NOT sign the user out. Firebase Auth retains the cached user in
+          // IndexedDB/localStorage and will re-emit them once the network
+          // recovers. Only drop to null if Firebase itself has cleared the
+          // session (auth.currentUser === null means genuine expiry/revocation).
+          console.warn('Firebase onAuthStateChanged error (likely a transient network issue):', error);
+          if (!isMounted) return;
+          const retained = auth.currentUser;
+          setUser(retained);
           setLoading(false);
         }
-      }
-    );
+      );
+    };
+
+    initAuth();
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      unsubscribe?.();
     };
   }, []);
 

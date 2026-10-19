@@ -204,19 +204,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     // --- SIGN-OUT or UNCONFIRMED STATE ---
     if (!user) {
-      // Do NOT wipe state if Firebase Auth is still actively resolving/restoring the session
+      // Do NOT wipe state while Firebase Auth is still resolving the session.
       if (authLoading) {
         return;
       }
 
-      // Only reset if we were previously tracking a signed-in user and auth resolution finished
+      // Secondary guard: if localStorage still holds an active UID, it means
+      // Firebase Auth emitted null transiently (e.g. during a token refresh
+      // network hiccup) but the session has not actually been revoked.
+      // In that case, keep the current state and wait for the real auth event.
+      // Only wipe if both (a) authLoading is done AND (b) the stored UID is
+      // absent (meaning signOutUser() cleared it, or this is a genuine logout).
+      const storedUid = (() => {
+        try {
+          return localStorage.getItem('echo_last_active_uid');
+        } catch {
+          return null;
+        }
+      })();
+
+      if (storedUid !== null) {
+        // Firebase emitted null but the stored session marker is still present.
+        // This is almost certainly a transient emission. Do nothing and wait.
+        return;
+      }
+
+      // Only reset if we were previously tracking a signed-in user and auth
+      // resolution has fully confirmed sign-out (no stored UID remaining).
       if (activeUidRef.current !== null) {
         activeUidRef.current = null;
-        try {
-          localStorage.removeItem('echo_last_active_uid');
-        } catch {
-          // ignore
-        }
         // Immediately wipe state so no previous account's data is visible
         setProfile(EMPTY_PROFILE);
         setQuotes(loadAndMigrateStoredQuotes()); // loads from shared (anonymous) key
