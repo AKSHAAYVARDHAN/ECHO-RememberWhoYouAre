@@ -3,40 +3,25 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
-  initializeAuth,
   GoogleAuthProvider,
   setPersistence,
   browserLocalPersistence,
-  indexedDBLocalPersistence,
 } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
-// Initialize Firebase App
-export const app = initializeApp(firebaseConfig);
+// Initialize Firebase App - reuse existing app if already initialized (hot reload safe)
+export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize Firestore with specific database ID from config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Firebase Authentication with browserLocalPersistence as PRIMARY persistence.
-// This ensures credentials and refresh tokens are always written directly to window.localStorage
-// (firebase:authUser:<apiKey>:[DEFAULT]), surviving hours of idle time, browser restarts, and
-// installed PWA cold boots without depending on volatile IndexedDB connection handles.
-export const auth = (() => {
-  if (typeof window !== 'undefined') {
-    try {
-      return initializeAuth(app, {
-        persistence: [browserLocalPersistence, indexedDBLocalPersistence],
-      });
-    } catch {
-      return getAuth(app);
-    }
-  }
-  return getAuth(app);
-})();
+// Initialize Firebase Authentication using getAuth(app), which provides the
+// required browser popup/redirect resolver for Google Sign-In and getRedirectResult.
+export const auth = getAuth(app);
 
 // authReadyPromise: resolves once browserLocalPersistence is confirmed active.
 //
