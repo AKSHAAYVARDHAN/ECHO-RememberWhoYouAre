@@ -63,46 +63,53 @@ export function getViewportMetrics(): ViewportMetrics {
   let safeLeft = isMobile ? 16 : isTablet ? 24 : 40;
   let safeRight = isMobile ? 16 : isTablet ? 24 : 40;
 
-  // Font sizing calibrated for crisp readability:
-  let fontSize = 15.0;
+  // Font sizing increased by ~35–45% for significantly enhanced readability in deep cosmic space:
+  // Desktop: 21.0px (was 15.0px, +40.0%), scaling up to 22.0px on large displays (>1600px)
+  // Tablet: 19.5px - 20.7px (was 14.5px, ~+35% to +43%)
+  // Large Mobile (420-599px): 17.6px - 18.5px (was 13.0px, ~+35% to +42%)
+  // Standard Mobile (340-419px): 16.8px - 17.5px (was 12.5px, ~+35% to +40%)
+  // Small Mobile (<340px): 16.0px (was 11.5px, +39.1%)
+  let fontSize = 21.0;
   if (width < 340) {
-    fontSize = 11.5;
+    fontSize = 16.0;
   } else if (width < 420) {
-    fontSize = 12.5;
+    const t = (width - 340) / (420 - 340);
+    fontSize = Math.round((16.8 + t * 0.7) * 10) / 10;
   } else if (width < 600) {
-    fontSize = 13.0;
+    const t = (width - 420) / (600 - 420);
+    fontSize = Math.round((17.6 + t * 0.9) * 10) / 10;
   } else if (width < 1024) {
-    fontSize = 14.5;
+    const t = (width - 600) / (1024 - 600);
+    fontSize = Math.round((19.5 + t * 1.2) * 10) / 10;
+  } else if (width < 1600) {
+    const t = (width - 1024) / (1600 - 1024);
+    fontSize = Math.round((21.0 + t * 0.8) * 10) / 10;
   } else {
-    fontSize = 15.0;
+    fontSize = 22.0;
   }
 
-  // Simultaneous quote density targets:
-  // Desktop: 8–12 active quotes
-  // Tablet: 5–8 active quotes
-  // Mobile: 3–5 active quotes
-  let maxConcurrency = 10;
+  // Simultaneous quote density targets calibrated for the ~40% larger typography:
+  // Desktop: 7–10 active quotes
+  // Tablet: 5–7 active quotes
+  // Mobile: 3–4 active quotes
+  let maxConcurrency = 8;
   if (isMobile) {
-    if (height < 620) {
-      // 320x568: target 3 active quotes
+    if (height < 650) {
       maxConcurrency = 3;
-    } else if (height < 780) {
-      // 375x667: target 4 active quotes
+    } else if (height < 800) {
       maxConcurrency = 4;
     } else {
-      // 360x800, 390x844, 430x932: target 5 active quotes
-      maxConcurrency = 5;
+      maxConcurrency = 4;
     }
   } else if (isTablet) {
-    maxConcurrency = width < 850 || height < 850 ? 6 : 8;
+    maxConcurrency = width < 850 || height < 850 ? 5 : 7;
   } else {
-    // Desktop: 8-12 quotes depending on screen size
-    maxConcurrency = width > 1600 ? 12 : width > 1200 ? 10 : 8;
+    maxConcurrency = width > 1600 ? 10 : width > 1200 ? 9 : 8;
   }
 
   // Clearance padding around quotes to prevent visual contact while enabling high density:
-  const paddingX = isMobile ? 12 : isTablet ? 16 : 18;
-  const paddingY = isMobile ? 14 : isTablet ? 15 : 16;
+  const paddingX = isMobile ? 10 : isTablet ? 14 : 16;
+  const paddingY = isMobile ? 12 : isTablet ? 14 : 15;
 
   return {
     width,
