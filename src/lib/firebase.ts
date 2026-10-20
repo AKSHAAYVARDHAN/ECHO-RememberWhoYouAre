@@ -7,8 +7,6 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import {
   getAuth,
   GoogleAuthProvider,
-  setPersistence,
-  browserLocalPersistence,
 } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -19,36 +17,37 @@ export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfi
 // Initialize Firestore with specific database ID from config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Firebase Authentication using getAuth(app), which provides the
-// required browser popup/redirect resolver for Google Sign-In and getRedirectResult.
+// Initialize Firebase Authentication using getAuth(app), which sets up the official
+// multi-tier browser persistence ([indexedDBLocalPersistence, browserLocalPersistence, browserSessionPersistence])
+// and configures browserPopupRedirectResolver for Google Sign-In and getRedirectResult.
 export const auth = getAuth(app);
 
-// authReadyPromise: resolves once browserLocalPersistence is confirmed active.
+// authReadyPromise: resolves once persistent browser storage is requested and
+// Firebase Auth has resolved its persisted session from storage via auth.authStateReady().
 //
-// CRITICAL — this must be awaited by AuthContext before subscribing to
-// onAuthStateChanged.  If onAuthStateChanged is subscribed while setPersistence
-// is still in-flight, Firebase Auth may have already read its persisted session
-// using the wrong (session-only) default, causing a spurious signed-out event
-// the next time the app is opened after the tab/PWA was closed.
+// CRITICAL: We do NOT invoke setPersistence(auth, browserLocalPersistence) at runtime.
+// In the Firebase Web SDK, setPersistence() actively calls removeCurrentUser() before
+// switching persistence. When called on reload or cold start, this purges existing
+// sessions stored in IndexedDB and destroys token-refresh state, which was the root cause
+// of unexpected automatic sign-outs after page reloads or extended idle periods.
 export const authReadyPromise: Promise<void> = (async () => {
   if (typeof window === 'undefined') return;
 
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-  } catch (error) {
-    // Log but do not block — Auth will still work; worst case is session-only
-    // persistence for this load which is better than crashing the app.
-    console.warn('Firebase: setPersistence(browserLocalPersistence) failed:', error);
-  }
-
   // Request durable storage so the browser does not evict our IndexedDB/localStorage
-  // under storage pressure (important for installed PWAs left idle for hours).
+  // under storage pressure (important for installed PWAs and long browser sessions).
   if (navigator.storage && navigator.storage.persist) {
     try {
       await navigator.storage.persist();
     } catch {
       // Non-fatal — browser may deny the request silently.
     }
+  }
+
+  // Await Firebase Auth's official session restoration promise
+  try {
+    await auth.authStateReady();
+  } catch (err) {
+    console.warn('Firebase: authStateReady() failed:', err);
   }
 })();
 

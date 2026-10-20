@@ -11,8 +11,6 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signOut,
-  setPersistence,
-  browserLocalPersistence,
   AuthError,
 } from 'firebase/auth';
 import { auth, googleProvider, authReadyPromise } from '../lib/firebase';
@@ -81,58 +79,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
 
   // -------------------------------------------------------------------------
-  // Authentication initialization
+  // Authentication initialization & session restoration
   //
-  // Order of operations matters critically here:
-  //   1. Await authReadyPromise (setPersistence to browserLocalPersistence)
-  //      BEFORE subscribing to onAuthStateChanged.
-  //      If we subscribe before setPersistence resolves, Firebase Auth may have
-  //      already read its persisted session under the wrong default persistence
-  //      (browserSessionPersistence), causing it to emit null on the next cold
-  //      start — which is the root cause of the spurious sign-out.
-  //   2. Await getRedirectResult() BEFORE subscribing to onAuthStateChanged.
-  //      On redirect sign-in flows the credential must be fully committed to
-  //      Firebase Auth before the listener runs; otherwise the listener fires
-  //      with null and then re-fires with the user, creating a visible flash.
-  //   3. In the error callback, never drop the user to null on transient network
-  //      failures. Firebase retains the cached user and will re-emit them once
-  //      the network recovers. Only a genuine session revocation should result
-  //      in null.
+  // 1. Immediately subscribe to onAuthStateChanged so no state transitions are missed.
+  // 2. Consume any pending redirect sign-in credential from getRedirectResult(auth).
+  // 3. Await authReadyPromise (auth.authStateReady()), which guarantees Firebase
+  //    Auth has finished reading its persisted session from storage (IndexedDB / localStorage)
+  //    before setting loading to false. This prevents premature flashes of the signed-out state.
+  // 4. Do NOT call setPersistence at runtime: Firebase Web SDK getAuth() already sets
+  //    up the multi-tier persistence hierarchy. Runtime calls to setPersistence()
+  //    actively wipe currentUser and corrupt token-refresh timers.
   // -------------------------------------------------------------------------
   useEffect(() => {
     let isMounted = true;
     let unsubscribe: (() => void) | null = null;
 
     const initAuth = async () => {
-      // Step 1: Ensure browserLocalPersistence is active.
-      await authReadyPromise;
-      if (!isMounted) return;
-
-      // Step 2: Consume any pending redirect sign-in result.
-      try {
-        const redirectResult = await getRedirectResult(auth);
-        if (isMounted && redirectResult?.user) {
-          try {
-            localStorage.setItem('echo_last_active_uid', redirectResult.user.uid);
-          } catch {
-            // ignore storage errors
-          }
-          setAuthError(null);
-          setAuthErrorCode(null);
-          // onAuthStateChanged below will emit the user — no double-set needed.
-        }
-      } catch (err: unknown) {
-        if (isMounted && err && typeof err === 'object' && 'code' in err) {
-          const formatted = getReadableErrorMessage(err as AuthError);
-          setAuthError(formatted.message);
-          setAuthErrorCode(formatted.code);
-        }
-      }
-
-      if (!isMounted) return;
-
-      // Step 3: Subscribe to auth state changes. Persistence is guaranteed
-      // active and any redirect credential is committed — no race conditions.
+      // Step 1: Subscribe to onAuthStateChanged as the continuous source of truth
       unsubscribe = onAuthStateChanged(
         auth,
         (currentUser) => {
@@ -148,19 +111,50 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setLoading(false);
         },
         (error) => {
-          // This error callback fires on token-refresh failures (e.g. network
-          // went away while the app was in the background for several hours).
-          // DO NOT sign the user out. Firebase Auth retains the cached user in
-          // IndexedDB/localStorage and will re-emit them once the network
-          // recovers. Only drop to null if Firebase itself has cleared the
-          // session (auth.currentUser === null means genuine expiry/revocation).
-          console.warn('Firebase onAuthStateChanged error (likely a transient network issue):', error);
+          // Network errors or token refresh hiccups while offline must NOT sign the user out.
+          // Firebase Auth retains the cached user in persistent storage and will retry.
+          console.warn('Firebase onAuthStateChanged error (transient network or token issue):', error);
           if (!isMounted) return;
-          const retained = auth.currentUser;
-          setUser(retained);
+          if (auth.currentUser) {
+            setUser(auth.currentUser);
+          }
           setLoading(false);
         }
       );
+
+      // Step 2: Consume redirect result if arriving back from a Google redirect
+      try {
+        const redirectResult = await getRedirectResult(auth);
+        if (isMounted && redirectResult?.user) {
+          try {
+            localStorage.setItem('echo_last_active_uid', redirectResult.user.uid);
+          } catch {
+            // ignore
+          }
+          setUser(redirectResult.user);
+          setAuthError(null);
+          setAuthErrorCode(null);
+        }
+      } catch (err: unknown) {
+        if (isMounted && err && typeof err === 'object' && 'code' in err) {
+          const formatted = getReadableErrorMessage(err as AuthError);
+          setAuthError(formatted.message);
+          setAuthErrorCode(formatted.code);
+        }
+      }
+
+      // Step 3: Await authReadyPromise (which resolves via auth.authStateReady()).
+      // This ensures Firebase Auth has finished its initial restoration from IndexedDB.
+      try {
+        await authReadyPromise;
+      } catch (err) {
+        console.warn('authReadyPromise error:', err);
+      }
+
+      if (isMounted) {
+        setUser(auth.currentUser);
+        setLoading(false);
+      }
     };
 
     initAuth();
@@ -181,13 +175,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsSigningIn(true);
       setAuthError(null);
       setAuthErrorCode(null);
-
-      // Ensure browserLocalPersistence is active on this auth instance prior to sign-in
-      try {
-        await setPersistence(auth, browserLocalPersistence);
-      } catch (pErr) {
-        console.warn('Could not confirm browserLocalPersistence before sign-in:', pErr);
-      }
 
       // Mobile check or explicit redirect preference
       const isMobile =
