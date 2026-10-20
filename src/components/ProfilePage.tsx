@@ -8,6 +8,7 @@ import { ArrowLeft, Edit2, Trash2, Check, X, RotateCcw, LogOut, CheckCircle2, Us
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { ProfileData, INITIAL_QUOTES } from '../types/quote';
+import { AudioLibrarySection } from './AudioLibrarySection';
 
 interface ProfilePageProps {
   onBack: () => void;
@@ -396,7 +397,10 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
           </form>
         </section>
 
-        {/* Section 2: Quote Management */}
+        {/* Section 2: Cosmic Audio Library */}
+        <AudioLibrarySection />
+
+        {/* Section 3: Quote Management */}
         <section aria-labelledby="quotes-heading" className="space-y-6 pt-4">
           <div className="border-b border-[#161616] pb-3 flex items-baseline justify-between">
             <div>

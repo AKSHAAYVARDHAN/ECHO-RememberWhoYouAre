@@ -68,6 +68,48 @@
         }
       },
       "required": ["id", "text", "userId"]
+    },
+    "UserAudioTrack": {
+      "title": "UserAudioTrack",
+      "description": "Metadata for user-uploaded custom cosmic audio tracks",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Unique identifier for audio track"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Track title or display name"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Original file name"
+        },
+        "size": {
+          "type": "number",
+          "description": "File size in bytes"
+        },
+        "type": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Audio MIME type"
+        },
+        "createdAt": {
+          "type": "number",
+          "description": "Epoch timestamp in milliseconds"
+        },
+        "userId": {
+          "type": "string",
+          "description": "Owner user ID"
+        }
+      },
+      "required": ["id", "name", "filename", "size", "type", "createdAt", "userId"]
     }
   },
   "firestore": {
@@ -82,6 +124,12 @@
         "$ref": "#/entities/UserQuote"
       },
       "description": "User's collection of custom affirmations and quotes"
+    },
+    "/users/{userId}/audioTracks/{trackId}": {
+      "schema": {
+        "$ref": "#/entities/UserAudioTrack"
+      },
+      "description": "User's collection of custom uploaded audio tracks"
     }
   }
 }

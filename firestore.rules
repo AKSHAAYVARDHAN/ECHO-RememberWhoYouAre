@@ -51,6 +51,24 @@ service cloud.firestore {
         data.createdAt is number;
     }
 
+    function isValidAudioTrack(data, userId) {
+      return data.id is string &&
+        data.id.size() > 0 &&
+        data.id.size() <= 128 &&
+        data.userId is string &&
+        data.userId == userId &&
+        data.name is string &&
+        data.name.size() > 0 &&
+        data.name.size() <= 120 &&
+        data.filename is string &&
+        data.filename.size() > 0 &&
+        data.filename.size() <= 120 &&
+        data.size is number &&
+        data.type is string &&
+        data.type.size() <= 60 &&
+        data.createdAt is number;
+    }
+
     // Connection validation document (Required by skill for testConnection)
     match /test/{docId} {
       allow read: if true;
@@ -81,6 +99,21 @@ service cloud.firestore {
           incoming().id == existing().id &&
           incoming().userId == existing().userId;
         allow delete: if isOwner(userId) && isValidId(quoteId);
+      }
+
+      // User audio tracks subcollection
+      match /audioTracks/{trackId} {
+        allow get: if isOwner(userId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) &&
+          isValidId(trackId) &&
+          isValidAudioTrack(incoming(), userId);
+        allow update: if isOwner(userId) &&
+          isValidId(trackId) &&
+          isValidAudioTrack(incoming(), userId) &&
+          incoming().id == existing().id &&
+          incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(trackId);
       }
     }
   }

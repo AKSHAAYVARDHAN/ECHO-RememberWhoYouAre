@@ -12,6 +12,8 @@ import { ProfilePage } from './components/ProfilePage';
 import { AuthPage } from './components/AuthPage';
 import { AuthProvider } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
+import { AudioProvider } from './context/AudioContext';
+import { CosmicAudioToggle } from './components/CosmicAudioToggle';
 
 const AppContent: React.FC = () => {
   const { currentPath, navigate } = useApp();
@@ -69,7 +71,10 @@ const AppContent: React.FC = () => {
         </header>
       )}
 
-      {/* 5. Dedicated Profile Management Page */}
+      {/* 5. Discreet Ambient Audio Toggle in Bottom-Right Corner on Cosmic Homepage */}
+      {!isSubpageOpen && <CosmicAudioToggle />}
+
+      {/* 6. Dedicated Profile Management Page */}
       {isProfileOpen && (
         <ProfilePage
           onBack={() => navigate('/')}
@@ -77,7 +82,7 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      {/* 5. Dedicated Authentication Page with Google Sign-In */}
+      {/* 7. Dedicated Authentication Page with Google Sign-In */}
       {isAuthOpen && (
         <AuthPage
           onBack={() => navigate('/')}
@@ -91,10 +96,12 @@ const AppContent: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <AppProvider>
-        <AppContent />
-        <Analytics />
-      </AppProvider>
+      <AudioProvider>
+        <AppProvider>
+          <AppContent />
+          <Analytics />
+        </AppProvider>
+      </AudioProvider>
     </AuthProvider>
   );
 }
