@@ -4,7 +4,14 @@
  */
 
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import {
+  getAuth,
+  initializeAuth,
+  GoogleAuthProvider,
+  setPersistence,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
+} from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
@@ -14,8 +21,22 @@ export const app = initializeApp(firebaseConfig);
 // Initialize Firestore with specific database ID from config
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
-// Initialize Firebase Authentication
-export const auth = getAuth(app);
+// Initialize Firebase Authentication with browserLocalPersistence as PRIMARY persistence.
+// This ensures credentials and refresh tokens are always written directly to window.localStorage
+// (firebase:authUser:<apiKey>:[DEFAULT]), surviving hours of idle time, browser restarts, and
+// installed PWA cold boots without depending on volatile IndexedDB connection handles.
+export const auth = (() => {
+  if (typeof window !== 'undefined') {
+    try {
+      return initializeAuth(app, {
+        persistence: [browserLocalPersistence, indexedDBLocalPersistence],
+      });
+    } catch {
+      return getAuth(app);
+    }
+  }
+  return getAuth(app);
+})();
 
 // authReadyPromise: resolves once browserLocalPersistence is confirmed active.
 //

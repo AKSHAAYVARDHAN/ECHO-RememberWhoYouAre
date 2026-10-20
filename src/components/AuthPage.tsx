@@ -140,13 +140,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
                 </p>
               </div>
 
-              {/* Primary Action: Continue with Google */}
+              {/* Primary Action: Sign In with Google */}
               <div className="space-y-3">
                 <button
                   type="button"
                   onClick={() => handleGoogleSignIn(false)}
                   disabled={isSigningIn}
-                  aria-label="Continue with Google"
+                  aria-label="Sign In with Google"
                   className="w-full relative group py-3 px-4 bg-[#FFFFFF] hover:bg-[#F2F2F2] active:bg-[#E5E5E5] text-[#1F1F1F] text-xs font-medium tracking-wider flex items-center justify-center gap-3 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-wait shadow-sm rounded-none border border-transparent"
                 >
                   {isSigningIn ? (
@@ -181,7 +181,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onBack, onSuccessNavigate })
                         />
                       </svg>
                       <span className="font-sans font-medium text-[13px] text-[#1F1F1F]">
-                        Continue with Google
+                        Sign In with Google
                       </span>
                     </>
                   )}

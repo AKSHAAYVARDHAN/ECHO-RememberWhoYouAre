@@ -201,12 +201,15 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
                     <UserIcon className="w-4 h-4" />
                   </div>
                 )}
-                <div>
-                  <div className="flex items-center gap-1.5">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-medium text-[#E8E8E8]">
                       {user.displayName || 'Affirmation Keeper'}
                     </span>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-[#66AA66]" />
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] uppercase tracking-wider bg-[#102010] text-[#66BB66] border border-[#224422] rounded-xs font-medium select-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#66BB66]" />
+                      Signed In
+                    </span>
                   </div>
                   <p className="text-[11px] text-[#777777]">{user.email}</p>
                 </div>
@@ -245,6 +248,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
                     }
                   }}
                   disabled={isSigningIn}
+                  aria-label="Sign In with Google"
                   className="w-full sm:w-auto px-4 py-2.5 bg-[#FFFFFF] hover:bg-[#F2F2F2] active:bg-[#E5E5E5] text-[#1F1F1F] text-xs font-medium tracking-wide flex items-center justify-center gap-2.5 transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {isSigningIn ? (
@@ -274,7 +278,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({ onBack, onNavigateAuth
                       />
                     </svg>
                   )}
-                  <span className="font-sans font-medium text-xs">Continue with Google</span>
+                  <span className="font-sans font-medium text-xs">Sign In with Google</span>
                 </button>
               </div>
             </div>
